@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Option Calculator</title>
+
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; color: #222; }
+h2, h3 { color: #333; }
+
+table { border-collapse: collapse; margin-top: 15px; width: 100%; max-width: 1100px; }
+th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: center; font-size: 14px; }
+th { background: #e0e0e0; }
+
+input, select {
+  width: 100%;
+  padding: 4px;
+  font-weight: bold;
+  background-color: #fff9c4;
+  text-align: center;
+}
+
+input.contracts { background-color: #fff59d; }
+select { min-width: 70px; }
+
+button {
+  font-weight: bold;
+  font-size: 14px;
+  padding: 6px 12px;
+  margin: 2px;
+  cursor: pointer;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+}
+button:hover { background: #0056b3; }
+
+canvas {
+  max-width: 1100px;
+  height: 500px !important;
+  margin-top: 20px;
+}
+
+/* scaled mode */
+.scaled table { max-width: 100%; }
+.scaled canvas { height: 700px !important; }
+.scaled th, .scaled td { font-size: 16px; padding:10px; }
+
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<h2>Option Calculator</h2>
+
+<button onclick="calculate()">Calculate</button>
+<button onclick="toggleScale()">Scale UI</button>
+
+<h3>Options</h3>
+<table id="inputTable">
+<thead>
+<tr>
+<th>Qty</th>
+<th>Style</th>
+<th>C/P</th>
+<th>Lot Size</th>
+<th>Spot ($)</th>
+<th>Strike ($)</th>
+<th>Rate (%)</th>
+<th>Carry (%)</th>
+<th>Expiry (yrs)</th>
+<th>Vol (%)</th>
+<th>Traded At ($)</th>
+</tr>
+</thead>
+<tbody id="inputTableBody"></tbody>
+</table>
+
+<button onclick="addOption()">Add Option</button>
+<button onclick="removeOption()">Remove Option</button>
+
+<h3>Premium & P&L</h3>
+<table id="premiumTable">
+<thead>
+<tr>
+<th>Option</th>
+<th>Model Price ($)</th>
+<th>Prob Assigned (%)</th>
+<th>Cash Delta ($)</th>
+<th>Total Premium ($)</th>
+<th>P&L ($)</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h3>Greeks</h3>
+<table id="greeksTable">
+<thead>
+<tr>
+<th>Option</th>
+<th>Delta (%)</th>
+<th>Gamma (%)</th>
+<th>Vega ($)</th>
+<th>Theta ($)</th>
+<th>Rho ($)</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h3>Net Payoff at Expiry</h3>
+<canvas id="payoffChart"></canvas>
+
+<script>
+function toggleScale(){
+document.body.classList.toggle("scaled");
+if(payoffChart) payoffChart.resize();
+}
+
+// ---------- Formatting helpers ----------
+
+// format number with commas + fixed decimals
+function toCurrencyFixed(value, decimals=2){
+  if(isNaN(value) || value===null) return "";
+  return value.toLocaleString(undefined,{
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
+}
+
+// ---------- Math Utility ----------
+function normCDF(x){
+let t=1/(1+0.2316419*Math.abs(x));
+let d=0.3989423*Math.exp(-x*x/2);
+let prob=d*(t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274)))));
+return x>=0?1-prob:prob;
+}
+
+// ---------- Black-Scholes ----------
+function blackScholesPrice(S,K,r,q,T,sigma,type){
+let b=r-q;
+let d1=(Math.log(S/K)+(b+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
+let d2=d1-sigma*Math.sqrt(T);
+let price,delta,gamma,vega,theta,rho;
+
+if(type==="C"){
+price=S*Math.exp(-q*T)*normCDF(d1)-K*Math.exp(-r*T)*normCDF(d2);
+delta=Math.exp(-q*T)*normCDF(d1);
+gamma=Math.exp(-q*T-0.5*d1*d1)/(S*sigma*Math.sqrt(2*Math.PI*T));
+vega=S*Math.exp(-q*T)*Math.sqrt(T)*Math.exp(-0.5*d1*d1)/Math.sqrt(2*Math.PI);
+// formula for theta per year, so divide by 365 for daily theta
+theta=-S*sigma*Math.exp(-q*T-0.5*d1*d1)/(2*Math.sqrt(2*Math.PI*T))-r*K*Math.exp(-r*T)*normCDF(d2)+q*S*Math.exp(-q*T)*normCDF(d1);
+rho=K*T*Math.exp(-r*T)*normCDF(d2);
+}else{
+price=K*Math.exp(-r*T)*normCDF(-d2)-S*Math.exp(-q*T)*normCDF(-d1);
+delta=Math.exp(-q*T)*(normCDF(d1)-1);
+gamma=Math.exp(-q*T-0.5*d1*d1)/(S*sigma*Math.sqrt(2*Math.PI*T));
+vega=S*Math.exp(-q*T)*Math.sqrt(T)*Math.exp(-0.5*d1*d1)/Math.sqrt(2*Math.PI);
+// formula for theta per year, so divide by 365 for daily theta
+theta=-S*sigma*Math.exp(-q*T-0.5*d1*d1)/(2*Math.sqrt(2*Math.PI*T))+r*K*Math.exp(-r*T)*normCDF(-d2)-q*S*Math.exp(-q*T)*normCDF(-d1);
+rho=-K*T*Math.exp(-r*T)*normCDF(-d2);
+}
+return{price,delta,gamma,vega,theta,rho,d1,d2};
+}
+
+// ---------- Input ----------
+const inputTableBody=document.getElementById("inputTableBody");
+let optionCount=1;
+
+function initOption1(){
+const row=document.createElement("tr");
+const defaults={Qty:1,Style:"A",Type:"C",LotSize:100,Spot:100,Strike:100,Rate:5,Carry:0,Expiry:1,Vol:10,TradedAt:0};
+const cols=["Qty","Style","Type","LotSize","Spot","Strike","Rate","Carry","Expiry","Vol","TradedAt"];
+
+row.innerHTML=cols.map(col=>{
+if(col==="Style") return `<td><select id="Style1"><option value="A">A</option><option value="E">E</option></select></td>`;
+if(col==="Type") return `<td><select id="Type1"><option value="C">C</option><option value="P">P</option></select></td>`;
+return `<td><input ${col==="Qty"?"class='contracts'":""} type="number" id="${col}1" value="${defaults[col]}"></td>`;
+}).join("");
+
+inputTableBody.appendChild(row);
+}
+initOption1();
+
+function addOption(){
+optionCount++;
+let row=inputTableBody.rows[0].cloneNode(true);
+row.querySelectorAll("input,select").forEach(el=>{
+el.id=el.id.replace(/\d+$/,optionCount);
+});
+inputTableBody.appendChild(row);
+}
+
+function removeOption(){
+if(optionCount<=1) return;
+inputTableBody.deleteRow(optionCount-1);
+optionCount--;
+}
+
+// ---------- Chart ----------
+let payoffChart;
+function plotPayoff(options){
+if(options.length===0) return;
+
+let prices=[],netPayoffs=[];
+let S=options[0].S;
+
+for(let i=0;i<=80;i++){
+let spot=S*0.5+(S*1.5-S*0.5)*i/80;
+prices.push(spot);
+let net=0;
+options.forEach(o=>{
+let intrinsic=o.type==="C"?Math.max(0,spot-o.K):Math.max(0,o.K-spot);
+net+=intrinsic*o.qty*o.lotSize;
+});
+netPayoffs.push(net);
+}
+
+if(payoffChart) payoffChart.destroy();
+
+payoffChart=new Chart(document.getElementById('payoffChart'),{
+type:'line',
+data:{labels:prices,datasets:[{label:'Net Payoff',data:netPayoffs,borderColor:'green',fill:true}]},
+options:{responsive:true}
+});
+}
+
+// ---------- Calculate ----------
+function calculate(){
+let premiumBody=document.querySelector("#premiumTable tbody");
+let greeksBody=document.querySelector("#greeksTable tbody");
+premiumBody.innerHTML="";
+greeksBody.innerHTML="";
+
+let totalDelta=0,totalPremium=0,totalPnL=0;
+const options=[];
+
+for(let i=1;i<=optionCount;i++){
+let qty=parseFloat(document.getElementById(`Qty${i}`).value);
+if(qty===0) continue;
+
+let S=parseFloat(document.getElementById(`Spot${i}`).value);
+let K=parseFloat(document.getElementById(`Strike${i}`).value);
+let r=parseFloat(document.getElementById(`Rate${i}`).value)/100;
+let carry=parseFloat(document.getElementById(`Carry${i}`).value)/100;
+let q=r-carry;
+let T=parseFloat(document.getElementById(`Expiry${i}`).value);
+let sigma=parseFloat(document.getElementById(`Vol${i}`).value)/100;
+let type=document.getElementById(`Type${i}`).value;
+let lotSize=parseFloat(document.getElementById(`LotSize${i}`).value);
+let marketPrice=parseFloat(document.getElementById(`TradedAt${i}`).value);
+
+let opt=blackScholesPrice(S,K,r,q,T,sigma,type);
+
+let premium_multipler=qty*lotSize;
+let greek_multiplier=qty;
+
+let totalPrem=opt.price*premium_multipler;
+let cashDelta=opt.delta*S*premium_multipler;
+let pnl=marketPrice>0?(marketPrice-opt.price)*premium_multipler:0;
+let probAssigned=0;
+if(type === "C") probAssigned = normCDF(opt.d2);
+else probAssigned = normCDF(-opt.d2);
+
+totalDelta+=cashDelta;
+totalPremium+=totalPrem;
+totalPnL+=pnl;
+
+options.push({S,K,type,qty,lotSize});
+
+premiumBody.innerHTML+=`
+<tr>
+<td>Option ${i}</td>
+<td>${opt.price.toFixed(4)}</td>
+<td>${(probAssigned*100).toFixed(2)}</td>
+<td>${toCurrencyFixed(cashDelta, 2)}</td>
+<td>${toCurrencyFixed(totalPrem, 2)}</td>
+<td>${toCurrencyFixed(pnl,2)}</td>
+</tr>`;
+
+greeksBody.innerHTML+=`
+<tr>
+<td>Option ${i}</td>
+<td>${(opt.delta*100).toFixed(2)}</td>
+<td>${(opt.gamma*100).toFixed(2)}</td>
+<td>${toCurrencyFixed(opt.vega*greek_multiplier, 2)}</td>
+<td>${toCurrencyFixed(opt.theta/365*premium_multipler, 2)}</td>
+<td>${toCurrencyFixed(opt.rho*greek_multiplier, 2)}</td>
+</tr>`;
+}
+
+// totals row
+premiumBody.innerHTML+=`
+<tr style="font-weight:bold;background:#eef;">
+<td>TOTAL</td>
+<td></td>
+<td></td>
+<td>${toCurrencyFixed(totalDelta, 2)}</td>
+<td>${toCurrencyFixed(totalPremium, 2)}</td>
+<td>${toCurrencyFixed(totalPnL, 2)}</td>
+</tr>`;
+
+plotPayoff(options);
+}
+</script>
+
+</body>
+</html>
