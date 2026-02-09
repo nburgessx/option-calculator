@@ -1,2 +1,4 @@
 # option-calculator
-Option calculator for european and american trading strategies
+
+Option calculator for European and American options trading
+
