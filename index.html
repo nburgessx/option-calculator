@@ -240,7 +240,10 @@ let totalDelta=0,totalPremium=0,totalPnL=0;
 const options=[];
 
 for(let i=1;i<=optionCount;i++){
-let qty=parseFloat(document.getElementById(`Qty${i}`).value);
+let qtyInput=parseFloat(document.getElementById(`Qty${i}`).value);
+let longOrShort = qtyInput >= 0 ? 1 : -1;
+
+let qty = Math.abs(qtyInput);
 if(qty===0) continue;
 
 let S=parseFloat(document.getElementById(`Spot${i}`).value);
@@ -259,9 +262,10 @@ let opt=blackScholesPrice(S,K,r,q,T,sigma,type);
 let premium_multipler=qty*lotSize;
 let greek_multiplier=qty;
 
-let totalPrem=opt.price*premium_multipler;
-let cashDelta=opt.delta*S*premium_multipler;
-let pnl=marketPrice>0?(marketPrice-opt.price)*premium_multipler:0;
+let totalPrem=-1.0*opt.price*premium_multipler*longOrShort;
+let cashDelta=opt.delta*S*premium_multipler*longOrShort;
+let pnl=marketPrice>0?(opt.price-marketPrice)*premium_multipler*longOrShort:0;
+
 let probAssigned=0;
 if(type === "C") probAssigned = normCDF(opt.d2);
 else probAssigned = normCDF(-opt.d2);
@@ -285,11 +289,11 @@ premiumBody.innerHTML+=`
 greeksBody.innerHTML+=`
 <tr>
 <td>Option ${i}</td>
-<td>${(opt.delta*100).toFixed(2)}</td>
-<td>${(opt.gamma*100).toFixed(2)}</td>
-<td>${toCurrencyFixed(opt.vega*greek_multiplier, 2)}</td>
-<td>${toCurrencyFixed(opt.theta/365*premium_multipler, 2)}</td>
-<td>${toCurrencyFixed(opt.rho*greek_multiplier, 2)}</td>
+<td>${(opt.delta*100*longOrShort).toFixed(2)}</td>
+<td>${(opt.gamma*100*longOrShort).toFixed(2)}</td>
+<td>${toCurrencyFixed(opt.vega*greek_multiplier*longOrShort, 2)}</td>
+<td>${toCurrencyFixed(opt.theta/365*premium_multipler*longOrShort, 2)}</td>
+<td>${toCurrencyFixed(opt.rho*greek_multiplier*longOrShort, 2)}</td>
 </tr>`;
 }
 
