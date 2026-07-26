@@ -255,7 +255,7 @@ let T=parseFloat(document.getElementById(`Expiry${i}`).value);
 let sigma=parseFloat(document.getElementById(`Vol${i}`).value)/100;
 let type=document.getElementById(`Type${i}`).value;
 let lotSize=parseFloat(document.getElementById(`LotSize${i}`).value);
-let marketPrice=parseFloat(document.getElementById(`TradedAt${i}`).value);
+let tradedPrice=parseFloat(document.getElementById(`TradedAt${i}`).value);
 
 let opt=blackScholesPrice(S,K,r,q,T,sigma,type);
 
@@ -264,7 +264,7 @@ let greek_multiplier=qty;
 
 let totalPrem=-1.0*opt.price*premium_multipler*longOrShort;
 let cashDelta=opt.delta*S*premium_multipler*longOrShort;
-let pnl=marketPrice>0?(marketPrice-opt.price)*premium_multipler*longOrShort:0;
+let pnl=tradedPrice>0?(tradedPrice-opt.price)*premium_multipler*longOrShort:0;
 
 let probAssigned=0;
 if(type === "C") probAssigned = normCDF(opt.d2);
@@ -276,6 +276,7 @@ totalPnL+=pnl;
 
 options.push({S,K,type,qty,lotSize});
 
+// ---------- Display Premium and P/L ----------
 premiumBody.innerHTML+=`
 <tr>
 <td>Option ${i}</td>
@@ -286,6 +287,7 @@ premiumBody.innerHTML+=`
 <td>${toCurrencyFixed(pnl,2)}</td>
 </tr>`;
 
+// ---------- Display Greeks ----------
 greeksBody.innerHTML+=`
 <tr>
 <td>Option ${i}</td>
