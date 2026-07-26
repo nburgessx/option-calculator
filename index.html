@@ -264,7 +264,7 @@ let greek_multiplier=qty;
 
 let totalPrem=-1.0*opt.price*premium_multipler*longOrShort;
 let cashDelta=opt.delta*S*premium_multipler*longOrShort;
-let pnl=tradedPrice>0?(tradedPrice-opt.price)*premium_multipler*longOrShort:0;
+let pnl=tradedPrice>0?(opt.price-tradedPrice)*premium_multipler*longOrShort:0;
 
 let probAssigned=0;
 if(type === "C") probAssigned = normCDF(opt.d2);
